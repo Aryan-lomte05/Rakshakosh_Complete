@@ -1,0 +1,11 @@
+{
+  "system": {
+    "name": "RakshaKosh",
+    "mode": "air-gapped-local",
+    "phase": 1
+  },
+  "network": {
+    "backend_host": "127.0.0.1",
+    "backend_port": 8000
+  }
+}
