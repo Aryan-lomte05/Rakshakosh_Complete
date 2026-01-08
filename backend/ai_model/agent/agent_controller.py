@@ -195,6 +195,23 @@ Do not make up facts about the documents, as you haven't looked at them for this
         # Step 13: Audit/Memory
         self.memory.append(session_id, user_query, full_response_buffer)
         
+        # Step 13b: Audit Logging (USP 5.3)
+        proc_time = round(time.time() - start_time, 2)
+        RakshaLogger.log_audit(
+            event_type="QUERY_GENERATED",
+            user_id="demo_user", # In prod: request.user.id
+            details={
+                "query": user_query,
+                "intent": intent.value if hasattr(intent, 'value') else str(intent),
+                "mode": mode,
+                "latency_sec": proc_time,
+                "doc_count": len(final_chunks),
+                "confidence": confidence_score,
+                "top_doc": final_chunks[0].get("doc_name") if final_chunks else None
+            }
+        )
+
+        
         # Step 14: Final Metadata
         yield json.dumps({
             "type": "metadata",
@@ -205,7 +222,7 @@ Do not make up facts about the documents, as you haven't looked at them for this
                 for c in final_chunks[:3] # Top 3 sources
             ],
             "language": detected_lang,
-            "processing_time": round(time.time() - start_time, 2)
+            "processing_time": proc_time
         }) + "\n"
 
     def _filter_rbac(self, user_id: str, chunks: List[Dict]) -> List[Dict]:

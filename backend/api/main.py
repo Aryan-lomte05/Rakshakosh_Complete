@@ -13,6 +13,7 @@ sys.path.append(root_dir)
 
 from backend.api.agent_api import router as agent_router # Import agent router
 from backend.api.ingestion_api import router as ingestion_router # Import ingestion router
+from backend.api.analytics_api import router as analytics_router # Import analytics router
 
 # --------------------------------------------------
 # App init
@@ -31,6 +32,7 @@ app.add_middleware(
 
 app.include_router(agent_router)
 app.include_router(ingestion_router)
+app.include_router(analytics_router)
 # --------------------------------------------------
 
 BASE_DIR = os.path.abspath(

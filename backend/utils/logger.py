@@ -48,3 +48,30 @@ class RakshaLogger:
     def debug(cls, module: str, message: str):
         # Always print debug for now, as per user request to "see everything"
         print(f"{cls.OKBLUE}[{cls._timestamp()}] [DEBUG] [{module}] {message}{cls.ENDC}")
+
+    @classmethod
+    def log_audit(cls, event_type: str, user_id: str, details: dict):
+        """
+        ELITE Audit Trail (USP 5.3): Logs structured security events to JSONL.
+        """
+        import json
+        import os
+        
+        log_dir = "backend/logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+            
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "event_type": event_type,
+            "user_id": user_id,
+            "details": details
+        }
+        
+        try:
+            with open(f"{log_dir}/audit.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+            # Also print to console for visibility
+            print(f"{cls.OKCYAN}[AUDIT] [{event_type}] User: {user_id} | {json.dumps(details)}{cls.ENDC}")
+        except Exception as e:
+            cls.error("AuditLogger", f"Failed to write audit log: {e}")
