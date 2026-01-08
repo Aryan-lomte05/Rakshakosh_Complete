@@ -42,19 +42,64 @@ async def ingest_document(file: UploadFile = File(...)):
         shutil.copy(file_path, persist_path)
         print(f"📥 Received file: {file.filename} (Persisted to {persist_path})")
 
-        # 2. Extract Pages (Simplified for live demo)
+        # 2. Extract Pages (Hybrid Engine: Pymupdf + Docling Fallback)
         doc = pymupdf.open(file_path)
         extracted_pages = []
+        is_scanned_detected = False
         
         for page_num in range(len(doc)):
             page = doc[page_num]
+            
+            # Density Check (USP 4.1 - Intelligent Switch)
+            # If text density is low (< 50 chars), assume image/scanned and switch to Docling
+            # OR if it's the first page and has low text, might be a cover image.
+            
             single_page_doc = pymupdf.open()
             single_page_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-            md_text = pymupdf4llm.to_markdown(single_page_doc, write_images=False)
-            single_page_doc.close()
+            raw_text = page.get_text()
             
+            if len(raw_text.strip()) < 50:
+                print(f"⚠️ Page {page_num+1}: Low density detected ({len(raw_text.strip())} chars). Activating ELITE OCR...")
+                
+                # Lazy import to keep startup fast
+                from backend.ingestion.docling_processor import DoclingProcessor
+                
+                if not hasattr(ingest_document, "ocr_processor"):
+                    ingest_document.ocr_processor = DoclingProcessor()
+                
+                # We need to process this specific page. Docling processes files.
+                # Since we have the single page doc in memory, we might need to save it temp to feed docling?
+                # For optimal performance in this specific "Hybrid" architecture, Docling works best on files.
+                # Strategy: If ANY page is scanned, we might want to flag the doc. 
+                # BUT fine-grained: Let's save just this page to temp and process it.
+                
+                page_temp_path = f"{file_path}_page_{page_num}.pdf"
+                single_page_doc.save(page_temp_path)
+                
+                try:
+                    processed = ingest_document.ocr_processor.process_pdf(page_temp_path)
+                    if processed:
+                        md_text = processed[0]["text"] # Docling returns full doc text, here it's just 1 page
+                        is_scanned_detected = True
+                    else:
+                        md_text = pymupdf4llm.to_markdown(single_page_doc) # Fallback to pymupdf if docling fails
+                except Exception as docling_err:
+                    print(f"❌ Docling Failed: {docling_err}")
+                    md_text = pymupdf4llm.to_markdown(single_page_doc)
+                finally:
+                    if os.path.exists(page_temp_path):
+                        os.remove(page_temp_path)
+            else:
+                # Standard Fast Path
+                md_text = pymupdf4llm.to_markdown(single_page_doc, write_images=False)
+
+            single_page_doc.close()
             extracted_pages.append({"page_number": page_num + 1, "text": md_text})
+            
         doc.close()
+        
+        if is_scanned_detected:
+            print("🧠 Smart Ingestion: Used Docling for scanned segments.")
 
         # 3. Generate Doc ID
         full_content = "\n".join(p["text"] for p in extracted_pages)

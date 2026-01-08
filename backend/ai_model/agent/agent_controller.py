@@ -137,8 +137,9 @@ Do not make up facts about the documents, as you haven't looked at them for this
             return # (Simplified for brevity in replace block, ensure original logic is preserved if needed)
             
         # Refusal check actually yields refusal msg and returns. 
-        # I need to match the original code structure or I'll break it.
-        # Let's just adding the yield status before retrieval and rerank is enough for this chunk.
+            # Add normalized score for heatmap
+            chunk["relevance_score"] = round(chunk.get("score", 0), 2)
+            final_chunks.append(chunk)
 
         # Step 9: Context & Prompt (USP 2.2)
         yield json.dumps({"type": "status", "content": "📝 Synthesizing answer..."}) + "\n"
@@ -218,8 +219,13 @@ Do not make up facts about the documents, as you haven't looked at them for this
             "confidence": confidence_score,
             "citations": citations_metadata,
             "sources": [
-                {"doc_name": c["doc_name"], "page": c["page_start"]} 
-                for c in final_chunks[:3] # Top 3 sources
+                {
+                    "doc_name": c["doc_name"], 
+                    "page": c["page_start"],
+                    "relevance_score": c.get("relevance_score", 0.0), # USP 2.1 Heatmap
+                    "match_type": "hybrid_semantic" # e.g. "exact", "semantic"
+                } 
+                for c in final_chunks[:5] # Top 5 for heatmap
             ],
             "language": detected_lang,
             "processing_time": proc_time
