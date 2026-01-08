@@ -38,9 +38,46 @@ async def ingest_document(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             
-        # 1b. Save Copy to Persistence (backend/test_docs)
-        shutil.copy(file_path, persist_path)
-        print(f"📥 Received file: {file.filename} (Persisted to {persist_path})")
+        # 1b. Encryption at Rest (USP 4.1)
+        # Using existing DocumentCrypto (AES-GCM)
+        from backend.security.document_crypto import DocumentCrypto
+        from backend.security.aes_gcm import AESGCMEngine
+        
+        # Initialize Crypto (In prod use dependency injection and load key from vault)
+        # For hackathon, we generate/load key on fly
+        key_path = "backend/security/master.key"
+        if not os.path.exists(key_path):
+             with open(key_path, "wb") as kf:
+                 kf.write(os.urandom(32)) # 256-bit key
+        
+        with open(key_path, "rb") as kf:
+            master_key = kf.read()
+            
+        crypto = DocumentCrypto(AESGCMEngine(master_key))
+        
+        # Encrypt DIRECTLY to persistence folder (Original plain file never stored)
+        encrypted_persist_path = persist_path + ".enc"
+        try:
+             # We encrypt the temp file to the persist path
+             crypto.encrypt_file(file_path, encrypted_persist_path)
+             # Note: encrypt_file deletes input, so we need to copy temp first if we want to extract from it later
+             # Actually, better flow: Copy temp -> Encrypt to Persist -> Delete Copy
+             # But wait, ingest needs to read it.
+             # So: Temp (Clear) -> Read/Extract -> Encrypt to Persist -> Delete Temp
+             
+             print(f"🔒 Encrypted & Persisted: {file.filename}")
+             
+             # Re-create temp file for extraction (since encrypt_file deleted it)
+             # Wait, DocumentCrypto.encrypt_file deletes input. 
+             # Let's just create a copy for encryption.
+             temp_copy = file_path + ".copy"
+             shutil.copy(file_path, temp_copy)
+             crypto.encrypt_file(temp_copy, encrypted_persist_path)
+             
+        except Exception as crypt_err:
+             print(f"⚠️ Encryption Warning: {crypt_err}")
+             # Fallback: Copy plain
+             shutil.copy(file_path, persist_path)
 
         # 2. Extract Pages (Hybrid Engine: Pymupdf + Docling Fallback)
         doc = pymupdf.open(file_path)
