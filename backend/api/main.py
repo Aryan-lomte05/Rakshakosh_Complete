@@ -15,11 +15,22 @@ from backend.api.agent_api import router as agent_router # Import agent router
 from backend.api.ingestion_api import router as ingestion_router # Import ingestion router
 from backend.api.analytics_api import router as analytics_router # Import analytics router
 
+# NEW: Auth and Documents routers
+from backend.auth.auth_api import router as auth_router
+from backend.documents.document_api import router as documents_router
+
+# NEW: MongoDB
+from backend.db.mongodb import Database, create_indexes
+
 # --------------------------------------------------
 # App init
 # --------------------------------------------------
 
-app = FastAPI()
+app = FastAPI(
+    title="RakshaKosh API",
+    description="Tier-Based RBAC Document Access System with RAG",
+    version="2.0.0"
+)
 
 # Add CORS
 app.add_middleware(
@@ -30,6 +41,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(auth_router)        # NEW: /auth/*
+app.include_router(documents_router)   # NEW: /documents/*
 app.include_router(agent_router)
 app.include_router(ingestion_router)
 app.include_router(analytics_router)
@@ -96,8 +110,32 @@ async def health():
         }
     }
 
+# --------------------------------------------------
+# MongoDB Lifecycle Events
+# --------------------------------------------------
+
 @app.on_event("startup")
-async def startup_event():
+async def startup_mongodb():
+    """Connect to MongoDB and create indexes."""
+    try:
+        await Database.connect()
+        await create_indexes()
+        print("✅ MongoDB connected and indexes created")
+    except Exception as e:
+        print(f"⚠️ MongoDB connection failed: {e}")
+        print("   Auth features will not work without MongoDB.")
+
+@app.on_event("shutdown")
+async def shutdown_mongodb():
+    """Disconnect from MongoDB."""
+    await Database.disconnect()
+
+# --------------------------------------------------
+# Existing Startup Event (Persistence Check)
+# --------------------------------------------------
+
+@app.on_event("startup")
+async def startup_persistence_check():
     """
     Startup persistence check:
     Scan backend/test_docs and ingest any missing files.

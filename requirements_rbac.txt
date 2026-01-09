@@ -1,0 +1,15 @@
+# Additional dependencies for RBAC system
+# Run: pip install -r requirements_rbac.txt
+
+# MongoDB async driver
+motor>=3.3.0
+
+# Password hashing (Argon2 preferred)
+passlib[argon2]>=1.7.4
+argon2-cffi>=23.1.0
+
+# JWT tokens
+PyJWT>=2.8.0
+
+# Already likely installed, but ensuring:
+pydantic[email]>=2.0.0
